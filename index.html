@@ -261,7 +261,10 @@ const CATS = [['antes', 'Sujo (antes)'], ['depois', 'Limpo (depois)'], ['lub', '
 let db;
 function abrirBanco() {
   return new Promise((res, rej) => {
-    const r = indexedDB.open('apontamento-lavagem', 1);
+    if (!('indexedDB' in window) || !window.indexedDB) { rej(new Error('IndexedDB indisponível neste navegador')); return; }
+    let r;
+    try { r = indexedDB.open('apontamento-lavagem', 1); } catch (e) { rej(e); return; }
+    r.onblocked = () => rej(new Error('Banco bloqueado por outra aba aberta do app — feche as outras abas'));
     r.onupgradeneeded = () => {
       const d = r.result;
       d.createObjectStore('dias', { keyPath: 'data' });
@@ -587,7 +590,30 @@ document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click
 
 /* ============ INÍCIO ============ */
 (async () => {
-  try { db = await abrirBanco(); } catch (e) { $('#main').innerHTML = '<div class="empty"><strong>Não foi possível abrir o armazenamento</strong>Abra pelo link do sistema no Chrome (não em aba anônima).</div>'; return; }
+  let erroBanco = null;
+  for (let t = 0; t < 3 && !db; t++) {
+    try { db = await abrirBanco(); } catch (e) { erroBanco = e; await new Promise(ok => setTimeout(ok, 600)); }
+  }
+  if (!db) {
+    const ua = navigator.userAgent;
+    const ios = /iPhone|iPad|iPod/.test(ua);
+    const inApp = /FBAN|FBAV|Instagram|WhatsApp|Line\/|; wv\)/.test(ua);
+    let ls = 'ok'; try { localStorage.setItem('_t', '1'); localStorage.removeItem('_t'); } catch (e) { ls = 'bloqueado'; }
+    let livre = '?'; try { const est = await navigator.storage.estimate(); livre = ((est.quota - est.usage) / 1048576).toFixed(0) + ' MB'; } catch (e) {}
+    const dicas = [];
+    if (inApp) dicas.push('O link abriu dentro de outro app (WhatsApp/Instagram). Toque nos 3 pontinhos ou no ícone de bússola e escolha <b>Abrir no navegador</b>.');
+    if (ios) dicas.push('No iPhone: Ajustes → Apps → Safari → desligue <b>Bloquear Todos os Cookies</b>. Depois feche e abra o link de novo.');
+    if (ls === 'bloqueado') dicas.push('O navegador está bloqueando o armazenamento de sites (cookies/dados de sites). Libere para este site.');
+    dicas.push('Confira se o celular não está com a memória cheia.');
+    dicas.push('Se nada resolver, tire um print desta tela e mande para o Clóvis.');
+    $('#main').innerHTML = '<div class="empty"><strong>Não foi possível abrir o armazenamento do celular</strong>'
+      + '<ul style="text-align:left;margin:10px 0 0;padding-left:18px;line-height:1.5">' + dicas.map(d => '<li>' + d + '</li>').join('') + '</ul>'
+      + '<button type="button" id="tentarDeNovo" style="margin-top:14px">Tentar de novo</button>'
+      + '<p style="font-size:11px;opacity:.7;margin-top:14px;word-break:break-word;text-align:left">Detalhe técnico: ' + ((erroBanco && (erroBanco.name + ' — ' + erroBanco.message)) || 'desconhecido')
+      + ' · localStorage: ' + ls + ' · espaço livre: ' + livre + ' · ' + ua + '</p></div>';
+    document.getElementById('tentarDeNovo').addEventListener('click', () => location.reload());
+    return;
+  }
   try { if (navigator.storage && navigator.storage.persist) await navigator.storage.persist(); } catch (e) {}
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
   await carregarDia(hoje);

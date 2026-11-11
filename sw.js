@@ -1,5 +1,5 @@
 // Guarda o app no celular para funcionar sem internet.
-const CACHE = 'apontamento-lavagem-v2';
+const CACHE = 'apontamento-lavagem-v3';
 const ARQS = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(ARQS))); self.skipWaiting(); });
 self.addEventListener('activate', e => {
